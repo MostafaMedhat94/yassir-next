@@ -1,15 +1,19 @@
 const { Queue } = require('bullmq');
 
+function bullmqConnection(redisUrl) {
+  return {
+    url: redisUrl,
+    maxRetriesPerRequest: null,
+    connectTimeout: 10000,
+    family: 4,
+  };
+}
+
 function createEventQueue(redisUrl, logger) {
   if (!redisUrl) return null;
 
   const queue = new Queue('events', {
-    connection: {
-      url: redisUrl,
-      maxRetriesPerRequest: null,
-      connectTimeout: 10000,
-      family: 4,
-    },
+    connection: bullmqConnection(redisUrl),
   });
 
   queue.on('error', (error) => {
@@ -23,6 +27,8 @@ function createEventQueue(redisUrl, logger) {
         { user_id: userId, event },
         {
           jobId: event.event_id,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
           removeOnComplete: 1000,
           removeOnFail: 1000,
         },
@@ -39,4 +45,4 @@ function isDuplicateJobError(error) {
   return /already exists/i.test(error.message);
 }
 
-module.exports = { createEventQueue, isDuplicateJobError };
+module.exports = { bullmqConnection, createEventQueue, isDuplicateJobError };

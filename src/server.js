@@ -3,6 +3,7 @@ const fastify = require('fastify');
 const { loadConfig } = require('./config');
 const { createStore } = require('./store/redis');
 const { createEventQueue } = require('./queue');
+const { startEventWorker } = require('./worker');
 const { registerUserRoutes } = require('./routes/users');
 const { registerEventRoutes } = require('./routes/events');
 const { registerDebugRoutes } = require('./routes/debug');
@@ -12,6 +13,9 @@ async function buildApp() {
   const app = fastify({ logger: true });
   const store = createStore(config.redisUrl, app.log);
   const events = createEventQueue(config.redisUrl, app.log);
+  const worker = config.redisUrl
+    ? startEventWorker({ redisUrl: config.redisUrl, store, logger: app.log })
+    : null;
 
   app.get('/health', async () => ({ ok: true }));
   registerUserRoutes(app, { store });
@@ -19,8 +23,9 @@ async function buildApp() {
   registerDebugRoutes(app, { store });
 
   app.addHook('onClose', async () => {
-    if (store) await store.close();
+    if (worker) await worker.close();
     if (events) await events.close();
+    if (store) await store.close();
   });
 
   return app;
