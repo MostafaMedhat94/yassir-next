@@ -55,7 +55,7 @@ function registerUserRoutes(app, { store, events }) {
 
     const now = new Date().toISOString();
 
-    if (isOnCooldown(saved, now, config.demoMode)) return { user_id: body.user_id };
+    if (!config.demoMode && isOnCooldown(saved, now, false)) return { user_id: body.user_id };
 
     try {
       await events.add(body.user_id, {

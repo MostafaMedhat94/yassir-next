@@ -1,3 +1,4 @@
+const { SERVICES } = require('../config/catalog');
 const { loadConfig } = require('../config');
 const { buildContext } = require('../pipeline/context');
 const { createRecommendation } = require('../pipeline/deliver');
@@ -119,12 +120,14 @@ async function processEvent(job, {
     summary: `${sourceLabel(reasoned.source)}.`,
   });
 
-  const policy = evaluatePolicy({
-    decision: reasoned.decision,
-    user: updated,
-    eventTs: event.ts,
-    demoMode,
-  });
+  const policy = demoMode
+    ? { allow: true }
+    : evaluatePolicy({
+      decision: reasoned.decision,
+      user: updated,
+      eventTs: event.ts,
+      demoMode,
+    });
 
   if (!policy.allow) {
     logger.info({ userId, reason: policy.reason }, 'recommendation suppressed');
@@ -157,8 +160,11 @@ async function processEvent(job, {
     };
   }
 
+  const serviceId = SERVICES[reasoned.decision.service_id]
+    ? reasoned.decision.service_id
+    : trigger.likely_service;
   const data = createRecommendation({
-    serviceId: reasoned.decision.service_id,
+    serviceId,
     cta: reasoned.decision.cta,
     title: reasoned.decision.title,
     description: reasoned.decision.description,
