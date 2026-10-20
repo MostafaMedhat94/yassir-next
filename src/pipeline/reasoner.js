@@ -59,9 +59,11 @@ function systemPrompt() {
     'You are the Yassir Next recommendation reasoner.',
     'Choose at most one service from the catalog. Return should_notify false when the moment is a poor fit.',
     'The trigger likely_service is a hint, not an order. Prefer an unused service that fits the persona and the moment.',
+    'food and grocery are both Yassir Express. Choose them only when the persona is about meals or groceries.',
+    'Choose pay for fares, receipts, bill splitting, or expenses. Choose go only when go is unused and the persona is about getting somewhere.',
     'When the trigger is persona_registered, there is no live trip. Use the persona, the behavior, and the unused services.',
     'If no catalog service genuinely fits, return should_notify false instead of forcing a cross-sell.',
-    'title is a short headline under 60 characters. It may address the person by first name, in the shape of "Returning home late, Sarah?"',
+    'title is a short headline under 60 characters. Address the person by the first name in full_name, in the shape of "Returning home late, {first name}?" Never use any other person\'s name.',
     'description is one sentence under 140 characters that states the benefit, in the shape of "Share your live trip and route with trusted contacts for extra peace of mind."',
     'cta is the button label, under 90 characters. Avoid discounts, urgency spam, and exclamation marks.',
     'reason is one sentence a reviewer can read. Do not invent services or URLs.',
@@ -168,6 +170,49 @@ function templateDecision(context, source) {
   };
 }
 
+function firstNameOf(fullName) {
+  const name = String(fullName || '').trim().split(/\s+/)[0];
+
+  return name || '';
+}
+
+function bindPersonName(text, fullName) {
+  const name = firstNameOf(fullName);
+
+  if (!name || !text) return text;
+
+  return text.replace(/,\s*([\p{Lu}][\p{L}'’-]+)\s*([?.!])/gu, (match, spoken, punct) => (
+    spoken.toLowerCase() === name.toLowerCase() ? match : `, ${name}${punct}`
+  ));
+}
+
+function bindDecision(decision, context) {
+  const fullName = context.persona && context.persona.full_name;
+
+  return {
+    ...decision,
+    title: bindPersonName(decision.title, fullName),
+    description: bindPersonName(decision.description, fullName),
+    cta: bindPersonName(decision.cta, fullName),
+  };
+}
+
+function withDeadline(promise, ms) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('llm_deadline');
+
+      error.name = 'TimeoutError';
+      reject(error);
+    }, ms);
+  });
+
+  return Promise.race([promise, deadline]).finally(() => {
+    clearTimeout(timer);
+  });
+}
+
 function extractText(body) {
   const parts = body && body.candidates && body.candidates[0]
     && body.candidates[0].content
@@ -204,7 +249,12 @@ async function callModel(context, config) {
     },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt() }] },
-      contents: [{ role: 'user', parts: [{ text: JSON.stringify(context) }] }],
+      contents: [{
+        role: 'user',
+        parts: [{
+          text: `Address this person as ${firstNameOf(context.persona && context.persona.full_name) || 'them'} and nobody else.\n${JSON.stringify(context)}`,
+        }],
+      }],
       generationConfig: {
         temperature: 0.4,
         maxOutputTokens: 256,
@@ -252,12 +302,12 @@ async function reasonAboutContext(context, options = {}) {
   if (!config.llmApiKey) return templateDecision(context, 'missing_api_key');
 
   try {
-    const text = await callModel(context, config);
+    const text = await withDeadline(callModel(context, config), config.llmTimeoutMs);
     const decision = parseDecision(text);
 
     if (!decision) return templateDecision(context, 'invalid_output');
 
-    return { decision, source: 'model' };
+    return { decision: bindDecision(decision, context), source: 'model' };
   } catch (error) {
     if (config.logger) {
       config.logger.warn({ message: error.message }, 'reasoner fallback');

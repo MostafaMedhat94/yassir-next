@@ -1,10 +1,10 @@
-const { SERVICE_IDS } = require('../config/catalog');
 const { loadConfig } = require('../config');
 const { buildContext } = require('../pipeline/context');
 const { createRecommendation } = require('../pipeline/deliver');
 const { localDate } = require('../pipeline/local-time');
 const { explainDelivery, sourceLabel } = require('../pipeline/explain');
 const { evaluatePolicy } = require('../pipeline/policy');
+const { registrationService } = require('../pipeline/registration-service');
 const { reasonAboutContext } = require('../pipeline/reasoner');
 const { matchTrigger } = require('../pipeline/triggers');
 const { sendDataMessage } = require('../push');
@@ -61,9 +61,7 @@ async function processEvent(job, {
   let trigger = matchTrigger(event);
 
   if (trigger && trigger.id === 'persona_registered') {
-    const unused = SERVICE_IDS.filter((serviceId) => updated.usage[serviceId] === 0);
-
-    trigger = { ...trigger, likely_service: unused[0] || 'food' };
+    trigger = { ...trigger, likely_service: registrationService(updated.persona, updated.usage) };
   }
 
   if (!trigger) {

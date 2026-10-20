@@ -6,7 +6,7 @@ function startEventWorker({ redisUrl, store, logger, live }) {
   const worker = new Worker(
     'events',
     (job) => processEvent(job, { store, logger, live }),
-    { connection: bullmqConnection(redisUrl) },
+    { connection: bullmqConnection(redisUrl), concurrency: 4 },
   );
 
   worker.on('failed', (job, error) => {
