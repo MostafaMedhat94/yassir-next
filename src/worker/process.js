@@ -1,4 +1,3 @@
-const { SERVICES } = require('../config/catalog');
 const { loadConfig } = require('../config');
 const { buildContext } = require('../pipeline/context');
 const { createRecommendation } = require('../pipeline/deliver');
@@ -6,7 +5,7 @@ const { localDate } = require('../pipeline/local-time');
 const { explainDelivery, sourceLabel } = require('../pipeline/explain');
 const { evaluatePolicy } = require('../pipeline/policy');
 const { registrationService } = require('../pipeline/registration-service');
-const { reasonAboutContext } = require('../pipeline/reasoner');
+const { filledDecision, reasonAboutContext } = require('../pipeline/reasoner');
 const { matchTrigger } = require('../pipeline/triggers');
 const { sendDataMessage } = require('../push');
 
@@ -99,11 +98,12 @@ async function processEvent(job, {
   });
 
   const reasoned = await reason(context, { logger });
+  const decision = filledDecision(reasoned.decision, context);
 
   logger.info({
     userId,
     source: reasoned.source,
-    decision: reasoned.decision,
+    decision,
     context,
   }, 'recommendation reasoned');
 
@@ -114,7 +114,7 @@ async function processEvent(job, {
     user_id: userId,
     persona_id: context.persona.id,
     ...story,
-    decision: reasoned.decision,
+    decision: decision,
     source: reasoned.source,
     source_label: sourceLabel(reasoned.source),
     summary: `${sourceLabel(reasoned.source)}.`,
@@ -123,7 +123,7 @@ async function processEvent(job, {
   const policy = demoMode
     ? { allow: true }
     : evaluatePolicy({
-      decision: reasoned.decision,
+      decision: decision,
       user: updated,
       eventTs: event.ts,
       demoMode,
@@ -140,7 +140,7 @@ async function processEvent(job, {
       user_id: userId,
       persona_id: context.persona.id,
       ...story,
-      decision: reasoned.decision,
+      decision: decision,
       source: reasoned.source,
       source_label: sourceLabel(reasoned.source),
       status: 'suppressed',
@@ -154,20 +154,17 @@ async function processEvent(job, {
       summary,
       trigger,
       context,
-      decision: reasoned.decision,
+      decision: decision,
       source: reasoned.source,
       usage: updated.usage,
     };
   }
 
-  const serviceId = SERVICES[reasoned.decision.service_id]
-    ? reasoned.decision.service_id
-    : trigger.likely_service;
   const data = createRecommendation({
-    serviceId,
-    cta: reasoned.decision.cta,
-    title: reasoned.decision.title,
-    description: reasoned.decision.description,
+    serviceId: decision.service_id,
+    cta: decision.cta,
+    title: decision.title,
+    description: decision.description,
     fromTs: event.ts,
   });
 
@@ -181,8 +178,8 @@ async function processEvent(job, {
         ...data,
         title: data.title,
         description: data.description,
-        reason: reasoned.decision.reason,
-        confidence: reasoned.decision.confidence,
+        reason: decision.reason,
+        confidence: decision.confidence,
         trigger_id: trigger.id,
       },
     });
@@ -197,7 +194,7 @@ async function processEvent(job, {
       user_id: userId,
       persona_id: context.persona.id,
       ...story,
-      decision: reasoned.decision,
+      decision: decision,
       source: reasoned.source,
       source_label: sourceLabel(reasoned.source),
       status: 'sent',
@@ -212,7 +209,7 @@ async function processEvent(job, {
       data,
       trigger,
       context,
-      decision: reasoned.decision,
+      decision: decision,
       source: reasoned.source,
       usage: updated.usage,
     };
@@ -228,7 +225,7 @@ async function processEvent(job, {
       user_id: userId,
       persona_id: context.persona.id,
       ...story,
-      decision: reasoned.decision,
+      decision: decision,
       source: reasoned.source,
       source_label: sourceLabel(reasoned.source),
       status: 'delivery_failed',
@@ -244,7 +241,7 @@ async function processEvent(job, {
       data,
       trigger,
       context,
-      decision: reasoned.decision,
+      decision: decision,
       source: reasoned.source,
     };
   }

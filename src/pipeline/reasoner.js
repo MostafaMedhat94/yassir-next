@@ -62,7 +62,7 @@ function systemPrompt() {
     'food and grocery are both Yassir Express. Choose them only when the persona is about meals or groceries.',
     'Choose pay for fares, receipts, bill splitting, or expenses. Choose go only when go is unused and the persona is about getting somewhere.',
     'When the trigger is persona_registered, there is no live trip. Use the persona, the behavior, and the unused services.',
-    'If no catalog service genuinely fits, return should_notify false instead of forcing a cross-sell.',
+    'If no catalog service genuinely fits, return should_notify false instead of forcing a cross-sell. Still return a non-empty title, description, and cta.',
     'title is a short headline under 60 characters. Address the person by the first name in full_name, in the shape of "Returning home late, {first name}?" Never use any other person\'s name.',
     'description is one sentence under 140 characters that states the benefit, in the shape of "Share your live trip and route with trusted contacts for extra peace of mind."',
     'cta is the button label, under 90 characters. Avoid discounts, urgency spam, and exclamation marks.',
@@ -213,6 +213,26 @@ function withDeadline(promise, ms) {
   });
 }
 
+function filledDecision(decision, context) {
+  const trigger = context.trigger || { id: 'persona_registered', likely_service: 'food' };
+  const serviceId = SERVICES[decision.service_id] ? decision.service_id : trigger.likely_service;
+  const copy = templateCopy({
+    ...context,
+    trigger: { ...trigger, likely_service: serviceId },
+  });
+  const title = (decision.title || '').trim();
+  const description = (decision.description || '').trim();
+  const cta = (decision.cta || '').trim();
+
+  return {
+    ...decision,
+    service_id: serviceId,
+    title: title || copy.title,
+    description: description || copy.description,
+    cta: cta || copy.cta,
+  };
+}
+
 function extractText(body) {
   const parts = body && body.candidates && body.candidates[0]
     && body.candidates[0].content
@@ -318,6 +338,7 @@ async function reasonAboutContext(context, options = {}) {
 }
 
 module.exports = {
+  filledDecision,
   reasonAboutContext,
   templateCopy,
 };
