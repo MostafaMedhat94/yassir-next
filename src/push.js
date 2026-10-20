@@ -28,9 +28,17 @@ async function sendDataMessage(token, data) {
     throw error;
   }
 
+  const payload = {};
+
+  for (const [key, value] of Object.entries(data || {})) {
+    const text = value == null ? '' : String(value);
+
+    if (text.trim()) payload[key] = text;
+  }
+
   return client.send({
     token,
-    data,
+    data: payload,
     android: { priority: 'high' },
   });
 }

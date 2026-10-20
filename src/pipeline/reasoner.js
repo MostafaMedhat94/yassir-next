@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const { loadConfig } = require('../config');
 const { SERVICES, SERVICE_IDS } = require('../config/catalog');
+const { visibleText } = require('./deliver');
 
 const decisionSchema = z.object({
   should_notify: z.boolean(),
@@ -220,9 +221,9 @@ function filledDecision(decision, context) {
     ...context,
     trigger: { ...trigger, likely_service: serviceId },
   });
-  const title = (decision.title || '').trim();
-  const description = (decision.description || '').trim();
-  const cta = (decision.cta || '').trim();
+  const title = visibleText(decision.title);
+  const description = visibleText(decision.description);
+  const cta = visibleText(decision.cta);
 
   return {
     ...decision,
