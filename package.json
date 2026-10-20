@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/server.js",
     "lint": "eslint src scripts",
-    "eval": "node scripts/eval-personas.js"
+    "eval": "node scripts/eval-personas.js",
+    "seed": "node scripts/seed-demo.js",
+    "rehearse": "node scripts/rehearse.js"
   },
   "dependencies": {
     "bullmq": "^6.3.18",

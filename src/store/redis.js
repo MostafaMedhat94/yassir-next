@@ -47,6 +47,20 @@ function createStore(redisUrl, logger) {
       });
     },
 
+    async replaceUser(user) {
+      if (redis.status === 'wait') await redis.connect();
+
+      await redis.hset(`user:${user.user_id}`, {
+        fcm_token: user.fcm_token,
+        persona: JSON.stringify(user.persona),
+        usage: JSON.stringify(user.usage),
+        last_used: '{}',
+        last_push_at: '',
+        push_count: '0',
+        push_day: '',
+      });
+    },
+
     async getUser(userId) {
       if (redis.status === 'wait') await redis.connect();
 
