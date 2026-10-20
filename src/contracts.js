@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const { SERVICE_IDS } = require('./config/catalog');
+const { demoUserId } = require('./config/persona-presets');
 
 const serviceIdSchema = z.enum(SERVICE_IDS);
 
@@ -110,6 +111,30 @@ const debugPushBodySchema = z
     message: 'service_id or data is required',
   });
 
+function parseRegistration(body, fcmToken) {
+  if (body && typeof body === 'object' && body.persona) {
+    const wrapped = userBodySchema.safeParse(body);
+
+    if (!wrapped.success) return { ok: false, error: wrapped.error };
+
+    return { ok: true, data: wrapped.data };
+  }
+
+  const persona = personaSchema.safeParse(body);
+
+  if (!persona.success) return { ok: false, error: persona.error };
+  if (!fcmToken) return { ok: false, missingToken: true };
+
+  return {
+    ok: true,
+    data: {
+      user_id: demoUserId(persona.data),
+      fcm_token: fcmToken,
+      persona: persona.data,
+    },
+  };
+}
+
 function validationError(error) {
   return {
     error: 'invalid_body',
@@ -124,5 +149,6 @@ module.exports = {
   userBodySchema,
   eventsBodySchema,
   debugPushBodySchema,
+  parseRegistration,
   validationError,
 };

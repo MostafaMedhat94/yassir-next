@@ -1,10 +1,7 @@
 const { loadConfig } = require('../src/config');
+const { demoUserId } = require('../src/config/persona-presets');
 const { createStore } = require('../src/store/redis');
 const { personas } = require('./eval-personas');
-
-function demoUserId(persona) {
-  return `demo-${persona.profile.fullName.toLowerCase()}`;
-}
 
 function demoUsers(fcmToken) {
   return personas.map((persona) => ({
@@ -51,4 +48,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { demoUserId, demoUsers };
+module.exports = { demoUsers };

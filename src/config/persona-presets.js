@@ -12,4 +12,10 @@ function usageForPersona(personaId) {
   return preset ? { ...preset } : null;
 }
 
-module.exports = { USAGE_PRESETS, usageForPersona };
+function demoUserId(persona) {
+  const name = persona.profile.fullName.trim().toLowerCase().replace(/\s+/g, '-');
+
+  return `demo-${name}`;
+}
+
+module.exports = { USAGE_PRESETS, usageForPersona, demoUserId };

@@ -1,15 +1,20 @@
 const { randomUUID } = require('crypto');
 const { loadConfig } = require('../config');
 const { usageForPersona } = require('../config/persona-presets');
-const { userBodySchema, validationError } = require('../contracts');
+const { parseRegistration, validationError } = require('../contracts');
 const { isOnCooldown } = require('../pipeline/policy');
 const { isDuplicateJobError } = require('../queue');
 
 function registerUserRoutes(app, { store, events }) {
   app.post('/v1/users', async (request, reply) => {
-    const parsed = userBodySchema.safeParse(request.body);
+    const config = loadConfig();
+    const parsed = parseRegistration(request.body, config.fcmToken);
 
-    if (!parsed.success) return reply.code(400).send(validationError(parsed.error));
+    if (!parsed.ok && parsed.missingToken) {
+      return reply.code(503).send({ error: 'fcm_token_not_configured' });
+    }
+
+    if (!parsed.ok) return reply.code(400).send(validationError(parsed.error));
     if (!store || !events) return reply.code(503).send({ error: 'redis_unavailable' });
 
     const body = parsed.data;
@@ -50,7 +55,7 @@ function registerUserRoutes(app, { store, events }) {
 
     const now = new Date().toISOString();
 
-    if (isOnCooldown(saved, now, loadConfig().demoMode)) return { user_id: body.user_id };
+    if (isOnCooldown(saved, now, config.demoMode)) return { user_id: body.user_id };
 
     try {
       await events.add(body.user_id, {
