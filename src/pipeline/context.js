@@ -17,9 +17,11 @@ function summarizePersona(persona) {
   return {
     id: persona.id,
     name: persona.name,
+    full_name: profile.fullName || null,
     subtitle: persona.subtitle || null,
     occupation: profile.occupation || null,
     context: persona.context || null,
+    behavior: persona.behavior || [],
     primary_motivation: persona.primaryMotivation || null,
     pain_points: persona.keyPainPoints || [],
   };

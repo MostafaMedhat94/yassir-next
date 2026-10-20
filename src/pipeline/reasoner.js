@@ -30,6 +30,14 @@ const responseSchema = {
   required: ['should_notify', 'service_id', 'cta', 'reason', 'confidence'],
 };
 
+function thinkingConfigFor(model) {
+  if (model.startsWith('gemini-2.5')) return { thinkingBudget: 0 };
+
+  if (model.includes('3.8') || model.startsWith('gemini-4')) return { thinkingLevel: 'low' };
+
+  return { thinkingLevel: 'minimal' };
+}
+
 function catalogLines() {
   return SERVICE_IDS.map((serviceId) => {
     const service = SERVICES[serviceId];
@@ -43,6 +51,7 @@ function systemPrompt() {
     'You are the Yassir Next recommendation reasoner.',
     'Choose at most one service from the catalog. Return should_notify false when the moment is a poor fit.',
     'The trigger likely_service is a hint, not an order. Prefer an unused service that fits the persona and the moment.',
+    'If no catalog service genuinely fits, return should_notify false instead of forcing a cross-sell.',
     'cta must be under 90 characters, mention the concrete context, and avoid discounts, urgency spam, and exclamation marks.',
     'reason is one sentence a reviewer can read. Do not invent services or URLs.',
     '',
@@ -99,7 +108,11 @@ function extractText(body) {
 
   if (!parts) return '';
 
-  return parts.map((part) => part.text || '').join('').trim();
+  return parts
+    .filter((part) => part.text && !part.thought)
+    .map((part) => part.text)
+    .join('')
+    .trim();
 }
 
 function parseDecision(text) {
@@ -128,19 +141,17 @@ async function callModel(context, config) {
       generationConfig: {
         temperature: 0.4,
         maxOutputTokens: 256,
-        responseFormat: {
-          text: {
-            mimeType: 'APPLICATION_JSON',
-            schema: responseSchema,
-          },
-        },
+        responseMimeType: 'application/json',
+        responseSchema,
+        thinkingConfig: thinkingConfigFor(config.llmModel),
       },
     }),
     signal: AbortSignal.timeout(config.llmTimeoutMs),
   });
 
   if (!response.ok) {
-    const error = new Error(`llm_http_${response.status}`);
+    const detail = (await response.text()).replace(/\s+/g, ' ').slice(0, 180);
+    const error = new Error(`llm_http_${response.status}: ${detail}`);
 
     error.name = 'LlmHttpError';
     throw error;
@@ -181,7 +192,9 @@ async function reasonAboutContext(context, options = {}) {
 
     return { decision, source: 'model' };
   } catch (error) {
-    if (config.logger) config.logger.warn({ err: error }, 'reasoner fallback');
+    if (config.logger) {
+      config.logger.warn({ message: error.message }, 'reasoner fallback');
+    }
 
     return templateDecision(context, fallbackSource(error));
   }
