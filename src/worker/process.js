@@ -1,7 +1,8 @@
 const { buildContext } = require('../pipeline/context');
+const { reasonAboutContext } = require('../pipeline/reasoner');
 const { matchTrigger } = require('../pipeline/triggers');
 
-async function processEvent(job, { store, logger, lookupWeather }) {
+async function processEvent(job, { store, logger, lookupWeather, reason = reasonAboutContext }) {
   const { user_id: userId, event } = job.data;
   const user = await store.getUser(userId);
 
@@ -28,9 +29,23 @@ async function processEvent(job, { store, logger, lookupWeather }) {
     logger,
   });
 
-  logger.info({ userId, context }, 'context built');
+  const reasoned = await reason(context, { logger });
 
-  return { status: 'triggered', trigger, context, usage: updated.usage };
+  logger.info({
+    userId,
+    source: reasoned.source,
+    decision: reasoned.decision,
+    context,
+  }, 'recommendation reasoned');
+
+  return {
+    status: 'triggered',
+    trigger,
+    context,
+    decision: reasoned.decision,
+    source: reasoned.source,
+    usage: updated.usage,
+  };
 }
 
 module.exports = { processEvent };
