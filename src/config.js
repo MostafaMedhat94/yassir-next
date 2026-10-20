@@ -5,6 +5,7 @@ function loadConfig() {
     llmApiKey: (process.env.LLM_API_KEY || '').trim(),
     llmModel: (process.env.LLM_MODEL || 'gemini-3.5-flash-lite').trim(),
     llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS) || 12000,
+    demoMode: (process.env.DEMO_MODE || '').trim() === 'true',
   };
 }
 

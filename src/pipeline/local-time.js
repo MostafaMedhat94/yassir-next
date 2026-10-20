@@ -18,13 +18,25 @@ function offsetMinutes(ts) {
   return sign * (Number(match[2]) * 60 + Number(match[3]));
 }
 
+function shiftedDate(ts) {
+  return new Date(new Date(ts).getTime() + offsetMinutes(ts) * 60 * 1000);
+}
+
 function localParts(ts) {
-  const shifted = new Date(new Date(ts).getTime() + offsetMinutes(ts) * 60 * 1000);
+  const shifted = shiftedDate(ts);
 
   return {
     minutes: shifted.getUTCHours() * 60 + shifted.getUTCMinutes(),
     day: shifted.getUTCDay(),
   };
+}
+
+function localDate(ts) {
+  const shifted = shiftedDate(ts);
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shifted.getUTCDate()).padStart(2, '0');
+
+  return `${shifted.getUTCFullYear()}-${month}-${day}`;
 }
 
 function mealSlot(local) {
@@ -46,6 +58,7 @@ function isLateNight(local) {
 
 module.exports = {
   localParts,
+  localDate,
   mealSlot,
   isWeekendMorning,
   isLateNight,

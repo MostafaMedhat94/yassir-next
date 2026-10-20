@@ -34,6 +34,8 @@ function createStore(redisUrl, logger) {
         usage: JSON.stringify(replaceHistory ? user.usage : existing.usage),
         last_used: JSON.stringify(replaceHistory ? {} : existing.last_used),
         last_push_at: replaceHistory ? '' : existing.last_push_at || '',
+        push_count: replaceHistory ? '0' : String(existing.push_count || 0),
+        push_day: replaceHistory ? '' : existing.push_day || '',
       });
     },
 
@@ -51,6 +53,8 @@ function createStore(redisUrl, logger) {
         usage: JSON.parse(data.usage),
         last_used: data.last_used ? JSON.parse(data.last_used) : {},
         last_push_at: data.last_push_at || null,
+        push_count: Number(data.push_count) || 0,
+        push_day: data.push_day || null,
       };
     },
 
@@ -80,6 +84,52 @@ function createStore(redisUrl, logger) {
       });
 
       return { ...user, usage, last_used: lastUsed };
+    },
+
+    async recordPush(userId, { eventTs, localDay, recommendation }) {
+      if (redis.status === 'wait') await redis.connect();
+
+      const user = await this.getUser(userId);
+
+      if (!user) return null;
+
+      const pushCount = user.push_day === localDay ? user.push_count + 1 : 1;
+
+      await redis.hset(`user:${userId}`, {
+        last_push_at: eventTs,
+        push_count: String(pushCount),
+        push_day: localDay,
+      });
+
+      await redis.hset(`rec:${recommendation.recommendation_id}`, {
+        user_id: userId,
+        service_id: recommendation.service_id,
+        cta: recommendation.CTA,
+        reason: recommendation.reason || '',
+        confidence: String(recommendation.confidence),
+        trigger_id: recommendation.trigger_id || '',
+        expires_at: recommendation.expires_at,
+        created_at: eventTs,
+      });
+
+      return { ...user, last_push_at: eventTs, push_count: pushCount, push_day: localDay };
+    },
+
+    async clearCooldowns(userId) {
+      if (redis.status === 'wait') await redis.connect();
+
+      const user = await this.getUser(userId);
+
+      if (!user) return null;
+
+      await redis.hset(`user:${userId}`, {
+        last_push_at: '',
+        push_count: '0',
+        push_day: '',
+        last_used: '{}',
+      });
+
+      return this.getUser(userId);
     },
 
     async close() {

@@ -1,6 +1,7 @@
 const { randomBytes } = require('crypto');
 const { SERVICES } = require('../config/catalog');
 const { debugPushBodySchema, validationError } = require('../contracts');
+const { buildPushData } = require('../pipeline/deliver');
 const { sendDataMessage } = require('../push');
 
 function registerDebugRoutes(app, { store }) {
@@ -40,20 +41,39 @@ function registerDebugRoutes(app, { store }) {
       return reply.code(502).send({ error: 'fcm_send_failed' });
     }
   });
+
+  app.post('/v1/debug/reset/:user_id', async (request, reply) => {
+    if (!store) return reply.code(503).send({ error: 'redis_unavailable' });
+
+    let user;
+
+    try {
+      user = await store.clearCooldowns(request.params.user_id);
+    } catch (error) {
+      request.log.error({ err: error }, 'failed to reset user');
+
+      return reply.code(503).send({ error: 'redis_unavailable' });
+    }
+
+    if (!user) return reply.code(404).send({ error: 'unknown_user' });
+
+    return {
+      user_id: user.user_id,
+      last_push_at: user.last_push_at,
+      push_count: user.push_count,
+    };
+  });
 }
 
 function buildCatalogPayload(body) {
   const service = SERVICES[body.service_id];
-  const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-  return {
-    recommendation_id: `rec_${randomBytes(4).toString('hex')}`,
-    service_id: service.service_id,
-    service_name: service.service_name,
-    CTA: body.CTA || `Open ${service.service_name}`,
-    service_deep_link: service.service_deep_link,
-    expires_at: expiresAt,
-  };
+  return buildPushData({
+    recommendationId: `rec_${randomBytes(4).toString('hex')}`,
+    serviceId: service.service_id,
+    cta: body.CTA || `Open ${service.service_name}`,
+    expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+  });
 }
 
 module.exports = { registerDebugRoutes };
