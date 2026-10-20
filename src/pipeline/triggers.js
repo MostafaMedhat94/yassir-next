@@ -1,6 +1,10 @@
 const { isLateNight, isWeekendMorning, localParts, mealSlot } = require('./local-time');
 
 function matchTrigger(event) {
+  if (event.type === 'persona_registered') {
+    return { id: 'persona_registered', likely_service: 'food' };
+  }
+
   const local = localParts(event.ts);
 
   if (event.type === 'trip_started' && event.props.destination_label === 'home') {

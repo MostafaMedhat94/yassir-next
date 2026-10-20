@@ -18,6 +18,12 @@ function withinCooldown(earlierTs, eventTs, windowMs) {
   return Date.parse(eventTs) - Date.parse(earlierTs) < windowMs;
 }
 
+function isOnCooldown(user, eventTs, demoMode) {
+  if (!user) return false;
+
+  return withinCooldown(user.last_push_at, eventTs, cooldownMs(demoMode));
+}
+
 function evaluatePolicy({ decision, user, eventTs, demoMode }) {
   if (!decision.should_notify) return { allow: false, reason: 'should_notify' };
   if (decision.confidence < CONFIDENCE_MIN) return { allow: false, reason: 'confidence' };
@@ -53,4 +59,5 @@ module.exports = {
   CONFIDENCE_MIN,
   DAILY_CAP,
   evaluatePolicy,
+  isOnCooldown,
 };

@@ -9,7 +9,7 @@ const personas = [
     id: 'daily_commuter',
     name: 'The Daily Commuter',
     subtitle: 'The Efficiency Seeker',
-    profile: { fullName: 'Maya', age: 29, occupation: 'Corporate Consultant' },
+    profile: { fullName: 'Maya', age: 29, occupation: 'Corporate Consultant', usageFrequency: 'Daily' },
     context: 'Relies on ride-hailing during morning and evening rush hours between home, client offices, and transit hubs.',
     behavior: [
       'Schedules rides or books instantly at fixed times.',
@@ -24,7 +24,7 @@ const personas = [
     id: 'budget_student',
     name: 'The Budget-Conscious Student',
     subtitle: 'The Value Maximizer',
-    profile: { fullName: 'Omar', age: 21, occupation: 'University Student' },
+    profile: { fullName: 'Omar', age: 21, occupation: 'University Student', usageFrequency: 'Several times a week' },
     context: 'Trips between campus, late-night study groups, social hangouts, and home on a strict budget.',
     behavior: [
       'Compares prices and will wait or walk if the fare drops.',
@@ -39,7 +39,7 @@ const personas = [
     id: 'business_traveler',
     name: 'The Business Traveler',
     subtitle: 'The Seamless Executive',
-    profile: { fullName: 'David', age: 45, occupation: 'Sales VP' },
+    profile: { fullName: 'David', age: 45, occupation: 'Sales VP', usageFrequency: 'Weekly travel' },
     context: 'Airport transfers, hotel pickups, and back-to-back client visits in unfamiliar cities.',
     behavior: [
       'Chooses premium rides for space and reliability.',
@@ -54,7 +54,7 @@ const personas = [
     id: 'night_out',
     name: 'The Night Out Passenger',
     subtitle: 'The Protection Seeker',
-    profile: { fullName: 'Sarah', age: 26, occupation: 'Graphic Designer' },
+    profile: { fullName: 'Sarah', age: 26, occupation: 'Graphic Designer', usageFrequency: 'Weekends and late evenings' },
     context: 'Returns home after evening social events, bars, or late shifts and cares first about getting there safely.',
     behavior: [
       'Shares live ride tracking with someone she trusts.',
@@ -69,7 +69,7 @@ const personas = [
     id: 'occasional_rider',
     name: 'The Occasional Rider',
     subtitle: 'The Accessibility Seeker',
-    profile: { fullName: 'Elena', age: 68, occupation: 'Retired Teacher' },
+    profile: { fullName: 'Elena', age: 68, occupation: 'Retired Teacher', usageFrequency: 'A couple of times a month' },
     context: 'Uses ride-hailing a couple of times a month for medical appointments, shopping, and visits when family is unavailable.',
     behavior: [
       'Prefers a larger vehicle and help with bags.',

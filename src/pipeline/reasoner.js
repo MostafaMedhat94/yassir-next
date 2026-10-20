@@ -5,16 +5,22 @@ const { SERVICES, SERVICE_IDS } = require('../config/catalog');
 const decisionSchema = z.object({
   should_notify: z.boolean(),
   service_id: z.enum(SERVICE_IDS),
+  title: z.string().max(80),
+  description: z.string().max(180),
   cta: z.string().max(180),
   reason: z.string().min(1).max(500),
   confidence: z.number().min(0).max(1),
 }).superRefine((decision, context) => {
-  if (decision.should_notify && decision.cta.trim().length === 0) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['cta'],
-      message: 'cta is required when should_notify is true',
-    });
+  if (!decision.should_notify) return;
+
+  for (const field of ['title', 'description', 'cta']) {
+    if (!(decision[field] || '').trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message: `${field} is required when should_notify is true`,
+      });
+    }
   }
 });
 
@@ -23,11 +29,13 @@ const responseSchema = {
   properties: {
     should_notify: { type: 'boolean' },
     service_id: { type: 'string', enum: SERVICE_IDS },
-    cta: { type: 'string', description: 'Under 90 characters. Mention the concrete context.' },
+    title: { type: 'string', description: 'Short personal headline, under 60 characters.' },
+    description: { type: 'string', description: 'One sentence of the benefit, under 140 characters.' },
+    cta: { type: 'string', description: 'Button label, under 90 characters.' },
     reason: { type: 'string', description: 'One sentence explaining the choice.' },
     confidence: { type: 'number' },
   },
-  required: ['should_notify', 'service_id', 'cta', 'reason', 'confidence'],
+  required: ['should_notify', 'service_id', 'title', 'description', 'cta', 'reason', 'confidence'],
 };
 
 function thinkingConfigFor(model) {
@@ -51,8 +59,11 @@ function systemPrompt() {
     'You are the Yassir Next recommendation reasoner.',
     'Choose at most one service from the catalog. Return should_notify false when the moment is a poor fit.',
     'The trigger likely_service is a hint, not an order. Prefer an unused service that fits the persona and the moment.',
+    'When the trigger is persona_registered, there is no live trip. Use the persona, the behavior, and the unused services.',
     'If no catalog service genuinely fits, return should_notify false instead of forcing a cross-sell.',
-    'cta must be under 90 characters, mention the concrete context, and avoid discounts, urgency spam, and exclamation marks.',
+    'title is a short headline under 60 characters. It may address the person by first name, in the shape of "Returning home late, Sarah?"',
+    'description is one sentence under 140 characters that states the benefit, in the shape of "Share your live trip and route with trusted contacts for extra peace of mind."',
+    'cta is the button label, under 90 characters. Avoid discounts, urgency spam, and exclamation marks.',
     'reason is one sentence a reviewer can read. Do not invent services or URLs.',
     '',
     'Catalog:',
@@ -60,30 +71,86 @@ function systemPrompt() {
   ].join('\n');
 }
 
-function templateCta(context) {
+function personaCopy(name, serviceId) {
+  const copies = {
+    food: {
+      title: `Hungry after the day, ${name}?`,
+      description: 'A meal can be ready without adding another stop.',
+      cta: 'Order food with Yassir Express',
+    },
+    grocery: {
+      title: `Need anything at home, ${name}?`,
+      description: 'Groceries can arrive without an extra trip out.',
+      cta: 'Order groceries with Yassir Express',
+    },
+    pay: {
+      title: `Settling the rest, ${name}?`,
+      description: 'Yassir Pay can cover what the ride does not.',
+      cta: 'Open Yassir Pay',
+    },
+    go: {
+      title: `Going somewhere, ${name}?`,
+      description: 'A ride can be ready when you are.',
+      cta: 'Book a ride with Yassir Go',
+    },
+  };
+
+  return copies[serviceId] || copies.food;
+}
+
+function templateCopy(context) {
+  const name = context.persona.full_name || 'there';
   const rainy = context.weather && (context.weather.condition === 'rain' || context.weather.condition === 'storm');
 
+  if (context.trigger.id === 'persona_registered') {
+    return personaCopy(name, context.trigger.likely_service);
+  }
+
   if (context.trigger.id === 'heading_home_meal' && context.trigger.meal === 'lunch') {
-    return 'Heading home? Lunch can be at your door when you arrive.';
+    return {
+      title: `Heading home for lunch, ${name}?`,
+      description: 'Lunch can be at your door when you arrive.',
+      cta: 'Heading home? Lunch can be at your door when you arrive.',
+    };
   }
 
   if (context.trigger.id === 'heading_home_meal' && rainy) {
-    return 'Heading home in the rain? Dinner can meet you at the door.';
+    return {
+      title: `Heading home in the rain, ${name}?`,
+      description: 'Dinner can meet you at the door.',
+      cta: 'Heading home in the rain? Dinner can meet you at the door.',
+    };
   }
 
   if (context.trigger.id === 'heading_home_meal') {
-    return 'Heading home? Dinner can be at your door when you arrive.';
+    return {
+      title: `Heading home, ${name}?`,
+      description: 'Dinner can be at your door when you arrive.',
+      cta: 'Heading home? Dinner can be at your door when you arrive.',
+    };
   }
 
   if (context.trigger.id === 'airport_arrival') {
-    return 'Just arrived? Yassir Pay can cover the rest of the trip.';
+    return {
+      title: `Just arrived, ${name}?`,
+      description: 'Yassir Pay can cover the rest of the trip.',
+      cta: 'Just arrived? Yassir Pay can cover the rest of the trip.',
+    };
   }
 
   if (context.trigger.id === 'late_night_completed') {
-    return 'Out late? Food can be waiting when this ride ends.';
+    return {
+      title: `Out late, ${name}?`,
+      description: 'Food can be waiting when this ride ends.',
+      cta: 'Out late? Food can be waiting when this ride ends.',
+    };
   }
 
-  return 'Free morning? Groceries can be at your door today.';
+  return {
+    title: `Free morning, ${name}?`,
+    description: 'Groceries can be at your door today.',
+    cta: 'Free morning? Groceries can be at your door today.',
+  };
 }
 
 function templateDecision(context, source) {
@@ -93,7 +160,7 @@ function templateDecision(context, source) {
     decision: {
       should_notify: true,
       service_id: context.trigger.likely_service,
-      cta: templateCta(context),
+      ...templateCopy(context),
       reason: `Template fallback (${source}). ${context.persona.name}, ${context.trigger.id}, unused: ${unused}.`,
       confidence: 0.7,
     },
@@ -202,5 +269,5 @@ async function reasonAboutContext(context, options = {}) {
 
 module.exports = {
   reasonAboutContext,
-  templateCta,
+  templateCopy,
 };

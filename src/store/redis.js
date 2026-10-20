@@ -130,6 +130,8 @@ function createStore(redisUrl, logger) {
         persona_id: user.persona.id,
         service_id: recommendation.service_id,
         cta: recommendation.CTA,
+        title: recommendation.title || '',
+        description: recommendation.description || '',
         reason: recommendation.reason || '',
         confidence: String(recommendation.confidence),
         trigger_id: triggerId,

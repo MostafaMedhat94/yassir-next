@@ -3,12 +3,21 @@ const { SERVICE_IDS } = require('./config/catalog');
 
 const serviceIdSchema = z.enum(SERVICE_IDS);
 
-const personaSchema = z
-  .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-  })
-  .passthrough();
+const personaSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  subtitle: z.string().min(1),
+  profile: z.object({
+    fullName: z.string().min(1),
+    age: z.number().int().positive(),
+    occupation: z.string().min(1),
+    usageFrequency: z.string().min(1),
+  }),
+  context: z.string().min(1),
+  behavior: z.array(z.string().min(1)).min(1),
+  keyPainPoints: z.array(z.string().min(1)).min(1),
+  primaryMotivation: z.string().min(1),
+});
 
 const usageSchema = z.object({
   go: z.number().int().nonnegative(),
@@ -21,7 +30,7 @@ const userBodySchema = z.object({
   user_id: z.string().min(1),
   fcm_token: z.string().min(1),
   persona: personaSchema,
-  usage: usageSchema,
+  usage: usageSchema.optional(),
 });
 
 const coordinatesSchema = z.object({
@@ -93,6 +102,8 @@ const debugPushBodySchema = z
     user_id: z.string().min(1),
     service_id: serviceIdSchema.optional(),
     CTA: z.string().min(1).max(180).optional(),
+    title: z.string().min(1).max(80).optional(),
+    description: z.string().min(1).max(180).optional(),
     data: z.record(z.string(), z.string()).optional(),
   })
   .refine((body) => body.data || body.service_id, {

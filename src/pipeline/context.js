@@ -20,6 +20,7 @@ function summarizePersona(persona) {
     full_name: profile.fullName || null,
     subtitle: persona.subtitle || null,
     occupation: profile.occupation || null,
+    usage_frequency: profile.usageFrequency || null,
     context: persona.context || null,
     behavior: persona.behavior || [],
     primary_motivation: persona.primaryMotivation || null,
@@ -29,7 +30,10 @@ function summarizePersona(persona) {
 
 async function buildContext({ user, event, trigger, lookupWeather = fetchWeather, logger }) {
   const local = localParts(event.ts);
-  const weather = await lookupWeather(event.props.lat, event.props.lng, { logger });
+  const hasLocation = event.props && event.props.lat != null && event.props.lng != null;
+  const weather = hasLocation
+    ? await lookupWeather(event.props.lat, event.props.lng, { logger })
+    : null;
 
   return {
     trigger,
@@ -46,8 +50,8 @@ async function buildContext({ user, event, trigger, lookupWeather = fetchWeather
     event: {
       type: event.type,
       ts: event.ts,
-      destination_label: event.props.destination_label || null,
-      eta_min: event.props.eta_min ?? null,
+      destination_label: (event.props && event.props.destination_label) || null,
+      eta_min: event.props && event.props.eta_min != null ? event.props.eta_min : null,
     },
   };
 }

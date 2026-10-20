@@ -19,7 +19,7 @@ async function buildApp() {
     : null;
 
   app.get('/health', async () => ({ ok: true }));
-  registerUserRoutes(app, { store });
+  registerUserRoutes(app, { store, events });
   registerEventRoutes(app, { store, events });
   registerDebugRoutes(app, { store });
   registerMetricRoutes(app, { store });

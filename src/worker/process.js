@@ -1,3 +1,4 @@
+const { SERVICE_IDS } = require('../config/catalog');
 const { loadConfig } = require('../config');
 const { buildContext } = require('../pipeline/context');
 const { createRecommendation } = require('../pipeline/deliver');
@@ -55,7 +56,13 @@ async function processEvent(job, {
   }
 
   const updated = await store.applyEvent(userId, event);
-  const trigger = matchTrigger(event);
+  let trigger = matchTrigger(event);
+
+  if (trigger && trigger.id === 'persona_registered') {
+    const unused = SERVICE_IDS.filter((serviceId) => updated.usage[serviceId] === 0);
+
+    trigger = { ...trigger, likely_service: unused[0] || 'food' };
+  }
 
   if (!trigger) {
     logger.info({ userId, type: event.type, usage: updated.usage }, 'event stopped');
@@ -104,6 +111,8 @@ async function processEvent(job, {
   const data = createRecommendation({
     serviceId: reasoned.decision.service_id,
     cta: reasoned.decision.cta,
+    title: reasoned.decision.title,
+    description: reasoned.decision.description,
     fromTs: event.ts,
   });
 
@@ -115,6 +124,8 @@ async function processEvent(job, {
       localDay: localDate(event.ts),
       recommendation: {
         ...data,
+        title: data.title,
+        description: data.description,
         reason: reasoned.decision.reason,
         confidence: reasoned.decision.confidence,
         trigger_id: trigger.id,

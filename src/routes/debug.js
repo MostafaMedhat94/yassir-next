@@ -72,6 +72,8 @@ function buildCatalogPayload(body) {
     recommendationId: `rec_${randomBytes(4).toString('hex')}`,
     serviceId: service.service_id,
     cta: body.CTA || `Open ${service.service_name}`,
+    title: body.title || service.service_name,
+    description: body.description || service.description,
     expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
   });
 }
