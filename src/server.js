@@ -29,8 +29,10 @@ async function buildApp() {
 function warnIfFirebaseMissing(config, logger) {
   if (!config.firebaseCredentialsPath) {
     logger.warn('GOOGLE_APPLICATION_CREDENTIALS is unset; debug push will fail');
+
     return;
   }
+
   if (!fs.existsSync(config.firebaseCredentialsPath)) {
     logger.error('Firebase credentials file is missing; debug push will fail');
   }
@@ -38,14 +40,17 @@ function warnIfFirebaseMissing(config, logger) {
 
 async function start() {
   const config = loadConfig();
+
   if (!config.redisUrl) {
     console.error('REDIS_URL is required');
     process.exit(1);
   }
 
   const app = await buildApp();
+
   warnIfFirebaseMissing(config, app.log);
   const port = Number(process.env.PORT) || 3000;
+
   await app.listen({ port, host: '0.0.0.0' });
 }
 

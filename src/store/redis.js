@@ -17,6 +17,7 @@ function createStore(redisUrl, logger) {
   return {
     async ping() {
       if (redis.status === 'wait') await redis.connect();
+
       return redis.ping();
     },
 
@@ -32,7 +33,9 @@ function createStore(redisUrl, logger) {
     async getUser(userId) {
       if (redis.status === 'wait') await redis.connect();
       const data = await redis.hgetall(`user:${userId}`);
+
       if (!data.fcm_token) return null;
+
       return {
         user_id: userId,
         fcm_token: data.fcm_token,
