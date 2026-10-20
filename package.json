@@ -1,0 +1,13 @@
+{
+  "name": "yassir-next-api",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "fastify": "^5.6.1"
+  }
+}
