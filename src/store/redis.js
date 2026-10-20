@@ -1,5 +1,13 @@
 const Redis = require('ioredis');
 
+const METRIC_FIELDS = ['sent', 'shown', 'opened', 'dismissed'];
+
+function metricKey(personaId, triggerId) {
+  const safe = (value) => String(value || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  return `metrics:${safe(personaId)}:${safe(triggerId)}`;
+}
+
 function createStore(redisUrl, logger) {
   if (!redisUrl) return null;
 
@@ -101,18 +109,101 @@ function createStore(redisUrl, logger) {
         push_day: localDay,
       });
 
+      const triggerId = recommendation.trigger_id || 'unknown';
+
       await redis.hset(`rec:${recommendation.recommendation_id}`, {
         user_id: userId,
+        persona_id: user.persona.id,
         service_id: recommendation.service_id,
         cta: recommendation.CTA,
         reason: recommendation.reason || '',
         confidence: String(recommendation.confidence),
-        trigger_id: recommendation.trigger_id || '',
+        trigger_id: triggerId,
         expires_at: recommendation.expires_at,
         created_at: eventTs,
       });
 
+      await this.incrementMetric(user.persona.id, triggerId, 'sent');
+
       return { ...user, last_push_at: eventTs, push_count: pushCount, push_day: localDay };
+    },
+
+    async getRecommendation(recommendationId) {
+      if (redis.status === 'wait') await redis.connect();
+
+      const data = await redis.hgetall(`rec:${recommendationId}`);
+
+      if (!data.user_id) return null;
+
+      return data;
+    },
+
+    async incrementMetric(personaId, triggerId, field) {
+      if (redis.status === 'wait') await redis.connect();
+
+      const key = metricKey(personaId, triggerId);
+
+      await redis.hset(key, { persona_id: personaId, trigger_id: triggerId });
+      const value = await redis.hincrby(key, field, 1);
+
+      await redis.sadd('metrics:index', key);
+
+      return Number(value);
+    },
+
+    async recordFeedback(userId, { recommendationId, field, eventTs }) {
+      if (redis.status === 'wait') await redis.connect();
+
+      const recommendation = await this.getRecommendation(recommendationId);
+
+      if (!recommendation || recommendation.user_id !== userId) {
+        return { status: 'unknown_recommendation' };
+      }
+
+      const personaId = recommendation.persona_id;
+      const triggerId = recommendation.trigger_id;
+
+      if (!personaId || !triggerId) return { status: 'unknown_recommendation' };
+
+      const stamp = `${field}_at`;
+
+      if (recommendation[stamp]) {
+        return { status: 'duplicate', persona_id: personaId, trigger_id: triggerId };
+      }
+
+      await redis.hset(`rec:${recommendationId}`, stamp, eventTs);
+      await this.incrementMetric(personaId, triggerId, field);
+
+      return { status: 'counted', persona_id: personaId, trigger_id: triggerId };
+    },
+
+    async getMetrics() {
+      if (redis.status === 'wait') await redis.connect();
+
+      const keys = await redis.smembers('metrics:index');
+      const metrics = [];
+
+      for (const key of keys) {
+        const data = await redis.hgetall(key);
+
+        if (!data.persona_id) continue;
+
+        const row = {
+          persona_id: data.persona_id,
+          trigger_id: data.trigger_id,
+        };
+
+        for (const field of METRIC_FIELDS) {
+          row[field] = Number(data[field]) || 0;
+        }
+
+        metrics.push(row);
+      }
+
+      metrics.sort((left, right) => left.persona_id.localeCompare(right.persona_id)
+        || left.trigger_id.localeCompare(right.trigger_id));
+
+      return metrics;
     },
 
     async clearCooldowns(userId) {

@@ -7,6 +7,7 @@ const { startEventWorker } = require('./worker');
 const { registerUserRoutes } = require('./routes/users');
 const { registerEventRoutes } = require('./routes/events');
 const { registerDebugRoutes } = require('./routes/debug');
+const { registerMetricRoutes } = require('./routes/metrics');
 
 async function buildApp() {
   const config = loadConfig();
@@ -21,6 +22,7 @@ async function buildApp() {
   registerUserRoutes(app, { store });
   registerEventRoutes(app, { store, events });
   registerDebugRoutes(app, { store });
+  registerMetricRoutes(app, { store });
 
   app.addHook('onClose', async () => {
     if (worker) await worker.close();

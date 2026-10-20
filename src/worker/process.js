@@ -7,6 +7,12 @@ const { reasonAboutContext } = require('../pipeline/reasoner');
 const { matchTrigger } = require('../pipeline/triggers');
 const { sendDataMessage } = require('../push');
 
+const FEEDBACK_FIELDS = {
+  recommendation_shown: 'shown',
+  recommendation_opened: 'opened',
+  recommendation_dismissed: 'dismissed',
+};
+
 async function processEvent(job, {
   store,
   logger,
@@ -22,6 +28,30 @@ async function processEvent(job, {
     logger.warn({ userId, eventId: event.event_id }, 'event for unknown user');
 
     return { status: 'unknown_user' };
+  }
+
+  const feedbackField = FEEDBACK_FIELDS[event.type];
+
+  if (feedbackField) {
+    const feedback = await store.recordFeedback(userId, {
+      recommendationId: event.props.recommendation_id,
+      field: feedbackField,
+      eventTs: event.ts,
+    });
+
+    logger.info({
+      userId,
+      type: event.type,
+      recommendationId: event.props.recommendation_id,
+      feedback: feedback.status,
+    }, 'recommendation feedback');
+
+    return {
+      status: feedback.status === 'counted' ? 'feedback' : feedback.status,
+      field: feedbackField,
+      persona_id: feedback.persona_id || null,
+      trigger_id: feedback.trigger_id || null,
+    };
   }
 
   const updated = await store.applyEvent(userId, event);
