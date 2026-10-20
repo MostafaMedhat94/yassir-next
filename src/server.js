@@ -1,6 +1,7 @@
 const fs = require('fs');
 const fastify = require('fastify');
 const { loadConfig } = require('./config');
+const { createLiveBus } = require('./live');
 const { createStore } = require('./store/redis');
 const { createEventQueue } = require('./queue');
 const { startEventWorker } = require('./worker');
@@ -8,14 +9,16 @@ const { registerUserRoutes } = require('./routes/users');
 const { registerEventRoutes } = require('./routes/events');
 const { registerDebugRoutes } = require('./routes/debug');
 const { registerMetricRoutes } = require('./routes/metrics');
+const { registerDashboardRoutes } = require('./routes/dashboard');
 
 async function buildApp() {
   const config = loadConfig();
   const app = fastify({ logger: true });
   const store = createStore(config.redisUrl, app.log);
   const events = createEventQueue(config.redisUrl, app.log);
+  const live = createLiveBus();
   const worker = config.redisUrl
-    ? startEventWorker({ redisUrl: config.redisUrl, store, logger: app.log })
+    ? startEventWorker({ redisUrl: config.redisUrl, store, logger: app.log, live })
     : null;
 
   app.get('/health', async () => ({ ok: true }));
@@ -23,6 +26,7 @@ async function buildApp() {
   registerEventRoutes(app, { store, events });
   registerDebugRoutes(app, { store });
   registerMetricRoutes(app, { store });
+  registerDashboardRoutes(app, { store, live });
 
   app.addHook('onClose', async () => {
     if (worker) await worker.close();

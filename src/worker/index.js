@@ -2,10 +2,10 @@ const { Worker } = require('bullmq');
 const { bullmqConnection } = require('../queue');
 const { processEvent } = require('./process');
 
-function startEventWorker({ redisUrl, store, logger }) {
+function startEventWorker({ redisUrl, store, logger, live }) {
   const worker = new Worker(
     'events',
-    (job) => processEvent(job, { store, logger }),
+    (job) => processEvent(job, { store, logger, live }),
     { connection: bullmqConnection(redisUrl) },
   );
 

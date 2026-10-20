@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yassir Next</title>
+  <style>
+    :root {
+      --bg: #f3eee6;
+      --paper: #fffcf8;
+      --ink: #221c16;
+      --muted: #7a7168;
+      --line: #e6dcd0;
+      --sent: #1d6b45;
+      --held: #8a5a12;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    }
+
+    main {
+      width: min(440px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 48px 0 64px;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 36px;
+    }
+
+    .brand {
+      margin: 0;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--line);
+    }
+
+    .dot.on { background: var(--sent); }
+
+    .names {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      margin: 0 0 36px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .names button {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .names button[aria-pressed="true"] {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 6px;
+    }
+
+    .names button:disabled { cursor: wait; }
+
+    .stage { min-height: 280px; }
+
+    .quiet {
+      margin: 48px 0 0;
+      color: var(--muted);
+      font-family: Georgia, "Iowan Old Style", Palatino, serif;
+      font-size: 28px;
+      line-height: 1.25;
+    }
+
+    .past {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .now { margin: 8px 0 0; }
+
+    .kicker {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .now h2 {
+      margin: 0 0 8px;
+      font-family: Georgia, "Iowan Old Style", Palatino, serif;
+      font-size: 30px;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+
+    .now p { margin: 0; font-size: 17px; line-height: 1.45; }
+
+    .now .meta { margin-top: 8px; color: var(--muted); font-size: 15px; }
+
+    .now.rule h2 { font-size: 22px; }
+
+    .card {
+      margin-top: 22px;
+      padding: 28px 26px 22px;
+      border-radius: 28px;
+      background: var(--paper);
+      box-shadow: 0 16px 40px rgba(48, 28, 14, 0.06);
+    }
+
+    .service {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .card h2 {
+      margin: 0 0 12px;
+      font-family: Georgia, "Iowan Old Style", Palatino, serif;
+      font-size: 32px;
+      font-weight: 500;
+      line-height: 1.15;
+    }
+
+    .card .copy { margin: 0 0 22px; font-size: 17px; line-height: 1.45; }
+
+    .cta {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--ink);
+      color: var(--paper);
+      text-align: center;
+    }
+
+    .again {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 15px;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+
+    .now.sent h2 { color: var(--sent); }
+    .now.held h2 { color: var(--held); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top">
+      <p class="brand">Yassir Next</p>
+      <span id="dot" class="dot" title="Live"></span>
+    </div>
+    <ul class="names" id="names"></ul>
+    <section class="stage" id="stage" aria-live="polite">
+      <p class="quiet">Choose a person.</p>
+    </section>
+  </main>
+  <script>
+    const services = { go: 'Yassir Go', food: 'Yassir Express', grocery: 'Yassir Express', pay: 'Yassir Pay' };
+    const neverLabel = {
+      go: 'taken a ride',
+      food: 'ordered food',
+      grocery: 'ordered groceries',
+      pay: 'used Yassir Pay',
+    };
+    let personas = [];
+    let selected = '';
+    let busy = false;
+    let current = {};
+    let queue = [];
+    let playing = false;
+    let generation = 0;
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => { setTimeout(resolve, ms); });
+    }
+
+    function paintNames() {
+      document.getElementById('names').innerHTML = personas.map((item) => `
+        <li><button type="button" data-id="${item.id}" aria-pressed="${item.id === selected}" ${busy ? 'disabled' : ''}>${escapeHtml(item.full_name)}</button></li>
+      `).join('');
+      document.querySelectorAll('#names button').forEach((button) => {
+        button.addEventListener('click', () => show(button.dataset.id));
+      });
+    }
+
+    function firstGap(event) {
+      return (event.unused || []).map((id) => neverLabel[id]).find(Boolean) || '';
+    }
+
+    function personSentence(event) {
+      const name = event.full_name || 'They';
+      const rides = (event.usage && event.usage.go) || 0;
+      const rideBit = rides >= 20 ? `${name} rides often` : `${name} has taken ${rides} rides`;
+      const gap = firstGap(event);
+      return gap ? `${rideBit} and has never ${gap}.` : `${rideBit}.`;
+    }
+
+    function personShort(event) {
+      const gap = firstGap(event);
+      return gap ? `${event.full_name} · never ${gap}` : event.full_name;
+    }
+
+    function because(event) {
+      const decision = event.decision || {};
+      if (event.source === 'model' && decision.reason) return decision.reason;
+      const gap = neverLabel[decision.service_id];
+      if (event.full_name && gap) return `${event.full_name} has never ${gap}.`;
+      return decision.reason || '';
+    }
+
+    function ruleText(event) {
+      if (event.summary) return event.summary;
+      if (event.status === 'sent') return `Sent to ${event.full_name}.`;
+      if (event.status === 'suppressed') return 'Held. They were just notified.';
+      return 'Shown here. The phone is not connected.';
+    }
+
+    function cardHtml(event) {
+      const decision = event.decision || {};
+      const data = event.data || {};
+      const title = data.title || decision.title;
+      if (!title) return '';
+      const service = services[data.service_id || decision.service_id] || '';
+      return `
+        <article class="card">
+          <p class="service">${escapeHtml(service)}</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p class="copy">${escapeHtml(data.description || decision.description || '')}</p>
+          <div class="cta">${escapeHtml(data.CTA || decision.cta || '')}</div>
+        </article>
+      `;
+    }
+
+    function paintStory(event) {
+      const stage = document.getElementById('stage');
+      const decision = event.decision;
+      const done = event.stage === 'delivery';
+      const lines = [];
+
+      if (done || decision) lines.push(`<p class="past">${escapeHtml(personShort(event))}</p>`);
+      else lines.push(`<div class="now"><p class="kicker">The person</p><h2>${escapeHtml(event.full_name || '')}</h2><p>${escapeHtml(personSentence(event))}</p></div>`);
+
+      if (decision && done) {
+        const pct = Number.isFinite(decision.confidence) ? ` · ${Math.round(decision.confidence * 100)}%` : '';
+        lines.push(`<p class="past">${escapeHtml(services[decision.service_id] || decision.service_id)}${pct}</p>`);
+      } else if (decision) {
+        const pct = Number.isFinite(decision.confidence) ? `${Math.round(decision.confidence * 100)}% · ` : '';
+        const written = event.source_label || (event.source === 'model' ? 'Written by the model' : 'Written from the fallback');
+        lines.push(`<div class="now"><p class="kicker">The choice</p><h2>${escapeHtml(services[decision.service_id] || decision.service_id)}</h2><p>${escapeHtml(because(event))}</p><p class="meta">${escapeHtml(pct + written)}</p></div>`);
+      }
+
+      if (done) {
+        const tone = event.status === 'sent' ? 'sent' : event.status === 'suppressed' ? 'held' : '';
+        lines.push(`<div class="now rule ${tone}"><p class="kicker">The rule</p><h2>${escapeHtml(ruleText(event))}</h2></div>`);
+        lines.push(cardHtml(event));
+        if (event.status === 'suppressed') lines.push('<button class="again" id="again" type="button">Allow another</button>');
+      }
+
+      stage.innerHTML = lines.join('');
+      const again = document.getElementById('again');
+      if (again) again.addEventListener('click', () => reset(event.persona_id));
+    }
+
+    async function drain() {
+      if (playing) return;
+      playing = true;
+      const mine = generation;
+      while (queue.length && mine === generation) {
+        const event = queue.shift();
+        if (event.run_id !== current.run_id) current = {};
+        current = { ...current, ...event };
+        if (current.persona_id) selected = current.persona_id;
+        paintNames();
+        paintStory(current);
+        if (current.stage !== 'delivery') await sleep(700);
+      }
+      playing = false;
+      if (queue.length) drain();
+    }
+
+    function enqueue(event) {
+      if (event.run_id && current.run_id && event.run_id !== current.run_id) {
+        generation += 1;
+        queue = [];
+      }
+      queue.push(event);
+      drain();
+    }
+
+    async function show(personaId) {
+      if (busy) return;
+      busy = true;
+      selected = personaId;
+      generation += 1;
+      queue = [];
+      current = {};
+      const person = personas.find((item) => item.id === personaId);
+      paintNames();
+      document.getElementById('stage').innerHTML = `<p class="quiet">Reading ${escapeHtml(person ? person.full_name : 'them')}…</p>`;
+      try {
+        const response = await fetch('/v1/dashboard/run', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ persona_id: personaId }),
+        });
+        if (!response.ok) document.getElementById('stage').innerHTML = '<p class="quiet">Something went wrong.</p>';
+      } catch (_error) {
+        document.getElementById('stage').innerHTML = '<p class="quiet">Something went wrong.</p>';
+      } finally {
+        busy = false;
+        paintNames();
+      }
+    }
+
+    async function reset(personaId) {
+      const response = await fetch('/v1/dashboard/reset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ persona_id: personaId || selected }),
+      });
+      if (!response.ok) return;
+      show(personaId || selected);
+    }
+
+    function connect() {
+      const source = new EventSource('/v1/live');
+      source.onopen = () => document.getElementById('dot').classList.add('on');
+      source.onerror = () => document.getElementById('dot').classList.remove('on');
+      source.onmessage = (message) => {
+        const event = JSON.parse(message.data);
+        if (event.type === 'hello' && event.latest) {
+          current = event.latest;
+          if (current.persona_id) selected = current.persona_id;
+          paintNames();
+          paintStory(current);
+        }
+        if (event.type === 'run') enqueue(event);
+      };
+    }
+
+    fetch('/v1/dashboard/personas')
+      .then((response) => response.json())
+      .then((body) => {
+        personas = body.personas || [];
+        paintNames();
+      })
+      .catch(() => {
+        document.getElementById('stage').innerHTML = '<p class="quiet">The people did not load.</p>';
+      });
+    connect();
+  </script>
+</body>
+</html>

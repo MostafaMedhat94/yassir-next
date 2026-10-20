@@ -3,6 +3,7 @@ const { loadConfig } = require('../config');
 const { buildContext } = require('../pipeline/context');
 const { createRecommendation } = require('../pipeline/deliver');
 const { localDate } = require('../pipeline/local-time');
+const { explainDelivery, sourceLabel } = require('../pipeline/explain');
 const { evaluatePolicy } = require('../pipeline/policy');
 const { reasonAboutContext } = require('../pipeline/reasoner');
 const { matchTrigger } = require('../pipeline/triggers');
@@ -21,6 +22,7 @@ async function processEvent(job, {
   reason = reasonAboutContext,
   send = sendDataMessage,
   demoMode = loadConfig().demoMode,
+  live,
 }) {
   const { user_id: userId, event } = job.data;
   const user = await store.getUser(userId);
@@ -77,6 +79,25 @@ async function processEvent(job, {
     lookupWeather,
     logger,
   });
+  const name = context.persona.full_name || updated.persona.name;
+  const story = {
+    full_name: name,
+    usage: context.usage,
+    unused: context.unused_services,
+  };
+
+  publish(live, {
+    type: 'run',
+    stage: 'context',
+    run_id: event.event_id,
+    user_id: userId,
+    persona_id: context.persona.id,
+    persona_name: context.persona.name,
+    occupation: context.persona.occupation,
+    behavior: context.persona.behavior[0] || context.persona.context,
+    summary: `Reading ${name}. Asking for one recommendation.`,
+    ...story,
+  });
 
   const reasoned = await reason(context, { logger });
 
@@ -87,6 +108,19 @@ async function processEvent(job, {
     context,
   }, 'recommendation reasoned');
 
+  publish(live, {
+    type: 'run',
+    stage: 'decision',
+    run_id: event.event_id,
+    user_id: userId,
+    persona_id: context.persona.id,
+    ...story,
+    decision: reasoned.decision,
+    source: reasoned.source,
+    source_label: sourceLabel(reasoned.source),
+    summary: `${sourceLabel(reasoned.source)}.`,
+  });
+
   const policy = evaluatePolicy({
     decision: reasoned.decision,
     user: updated,
@@ -96,10 +130,27 @@ async function processEvent(job, {
 
   if (!policy.allow) {
     logger.info({ userId, reason: policy.reason }, 'recommendation suppressed');
+    const summary = explainDelivery({ status: 'suppressed', reason: policy.reason, name, demoMode });
+
+    publish(live, {
+      type: 'run',
+      stage: 'delivery',
+      run_id: event.event_id,
+      user_id: userId,
+      persona_id: context.persona.id,
+      ...story,
+      decision: reasoned.decision,
+      source: reasoned.source,
+      source_label: sourceLabel(reasoned.source),
+      status: 'suppressed',
+      reason: policy.reason,
+      summary,
+    });
 
     return {
       status: 'suppressed',
       reason: policy.reason,
+      summary,
       trigger,
       context,
       decision: reasoned.decision,
@@ -133,10 +184,27 @@ async function processEvent(job, {
     });
 
     logger.info({ userId, messageId, recommendationId: data.recommendation_id }, 'recommendation sent');
+    const summary = explainDelivery({ status: 'sent', name, demoMode });
+
+    publish(live, {
+      type: 'run',
+      stage: 'delivery',
+      run_id: event.event_id,
+      user_id: userId,
+      persona_id: context.persona.id,
+      ...story,
+      decision: reasoned.decision,
+      source: reasoned.source,
+      source_label: sourceLabel(reasoned.source),
+      status: 'sent',
+      data,
+      summary,
+    });
 
     return {
       status: 'sent',
       message_id: messageId,
+      summary,
       data,
       trigger,
       context,
@@ -145,22 +213,41 @@ async function processEvent(job, {
       usage: updated.usage,
     };
   } catch (error) {
-    if (error.code === 'firebase_not_configured') {
-      logger.warn({ userId, recommendationId: data.recommendation_id }, 'recommendation not sent');
+    const reason = error.code || 'fcm_send_failed';
+    const summary = explainDelivery({ status: 'delivery_failed', reason, name, demoMode });
 
-      return {
-        status: 'delivery_failed',
-        reason: 'firebase_not_configured',
-        data,
-        trigger,
-        context,
-        decision: reasoned.decision,
-        source: reasoned.source,
-      };
-    }
+    logger.warn({ userId, message: error.message, recommendationId: data.recommendation_id }, 'recommendation not sent');
+    publish(live, {
+      type: 'run',
+      stage: 'delivery',
+      run_id: event.event_id,
+      user_id: userId,
+      persona_id: context.persona.id,
+      ...story,
+      decision: reasoned.decision,
+      source: reasoned.source,
+      source_label: sourceLabel(reasoned.source),
+      status: 'delivery_failed',
+      reason,
+      data,
+      summary,
+    });
 
-    throw error;
+    return {
+      status: 'delivery_failed',
+      reason,
+      summary,
+      data,
+      trigger,
+      context,
+      decision: reasoned.decision,
+      source: reasoned.source,
+    };
   }
+}
+
+function publish(live, event) {
+  if (live) live.publish(event);
 }
 
 module.exports = { processEvent };
