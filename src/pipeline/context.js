@@ -1,0 +1,53 @@
+const { SERVICE_IDS } = require('../config/catalog');
+const { localParts, mealSlot } = require('./local-time');
+const { fetchWeather } = require('./weather');
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function formatTime(local) {
+  const hour = Math.floor(local.minutes / 60);
+  const minute = local.minutes % 60;
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function summarizePersona(persona) {
+  const profile = persona.profile || {};
+
+  return {
+    id: persona.id,
+    name: persona.name,
+    subtitle: persona.subtitle || null,
+    occupation: profile.occupation || null,
+    context: persona.context || null,
+    primary_motivation: persona.primaryMotivation || null,
+    pain_points: persona.keyPainPoints || [],
+  };
+}
+
+async function buildContext({ user, event, trigger, lookupWeather = fetchWeather, logger }) {
+  const local = localParts(event.ts);
+  const weather = await lookupWeather(event.props.lat, event.props.lng, { logger });
+
+  return {
+    trigger,
+    persona: summarizePersona(user.persona),
+    local: {
+      time: formatTime(local),
+      day: DAY_NAMES[local.day],
+      meal: mealSlot(local),
+    },
+    weather,
+    usage: user.usage,
+    last_used: user.last_used,
+    unused_services: SERVICE_IDS.filter((serviceId) => user.usage[serviceId] === 0),
+    event: {
+      type: event.type,
+      ts: event.ts,
+      destination_label: event.props.destination_label || null,
+      eta_min: event.props.eta_min ?? null,
+    },
+  };
+}
+
+module.exports = { buildContext };
