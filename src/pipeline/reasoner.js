@@ -3,6 +3,7 @@ const { loadConfig } = require('../config');
 const { SERVICES, SERVICE_IDS } = require('../config/catalog');
 const { callCursor } = require('./cursor');
 const { visibleText } = require('./deliver');
+const { childLogger } = require('../logger');
 
 const decisionSchema = z.object({
   should_notify: z.boolean(),
@@ -317,47 +318,109 @@ function fallbackSource(error) {
   return 'request_failed';
 }
 
+function modelPlan(config) {
+  const plan = [];
+
+  if (config.cursorApiKey) plan.push('cursor');
+  if (config.llmApiKey) plan.push('gemini');
+
+  return {
+    plan: plan.length ? plan : ['template'],
+    cursor_model: config.cursorModel || null,
+    gemini_model: config.llmModel,
+    timeout_ms: config.llmTimeoutMs,
+  };
+}
+
+async function attemptModel(log, config, provider, model, call) {
+  const started = Date.now();
+
+  log.info({ provider, model, timeout_ms: config.llmTimeoutMs }, 'model call started');
+
+  try {
+    const text = await withDeadline(call(), config.llmTimeoutMs);
+    const decision = parseDecision(text);
+
+    log.info({
+      provider,
+      model,
+      duration_ms: Date.now() - started,
+      outcome: decision ? 'ok' : 'invalid_output',
+      service_id: decision ? decision.service_id : null,
+    }, 'model call finished');
+
+    return { decision, source: decision ? null : 'invalid_output' };
+  } catch (error) {
+    const source = fallbackSource(error);
+
+    log.warn({
+      provider,
+      model,
+      duration_ms: Date.now() - started,
+      outcome: source,
+      err: error.message,
+    }, 'model call finished');
+
+    return { decision: null, source };
+  }
+}
+
+function chooseTemplate(log, context, source) {
+  log.info({ provider: 'template', source }, 'model chosen');
+
+  return templateDecision(context, source);
+}
+
 async function reasonAboutContext(context, options = {}) {
   const config = {
     ...loadConfig(),
     fetchImpl: fetch,
     ...options,
   };
+  const log = childLogger(config.logger, { component: 'reasoner' });
+  const personaId = context.persona && context.persona.id;
 
-  if (!config.cursorApiKey && !config.llmApiKey) return templateDecision(context, 'missing_api_key');
+  log.info({ ...modelPlan(config), persona_id: personaId || null }, 'model plan');
 
   if (config.cursorApiKey) {
-    try {
-      const text = await withDeadline(callCursor(context, {
+    const cursor = await attemptModel(
+      log,
+      config,
+      'cursor',
+      config.cursorModel || 'account_default',
+      () => callCursor(context, {
         ...config,
         addressAs: firstNameOf(context.persona && context.persona.full_name),
-      }, systemPrompt()), config.llmTimeoutMs);
-      const decision = parseDecision(text);
+      }, systemPrompt()),
+    );
 
-      if (decision) return { decision: bindDecision(decision, context), source: 'cursor' };
+    if (cursor.decision) {
+      log.info({ provider: 'cursor', source: 'cursor', service_id: cursor.decision.service_id }, 'model chosen');
 
-      if (config.logger) config.logger.warn({ message: 'cursor_invalid_output' }, 'reasoner cursor fallback');
-    } catch (error) {
-      if (config.logger) config.logger.warn({ message: error.message }, 'reasoner cursor fallback');
-    }
-  }
-
-  if (!config.llmApiKey) return templateDecision(context, 'missing_api_key');
-
-  try {
-    const text = await withDeadline(callModel(context, config), config.llmTimeoutMs);
-    const decision = parseDecision(text);
-
-    if (!decision) return templateDecision(context, 'invalid_output');
-
-    return { decision: bindDecision(decision, context), source: 'model' };
-  } catch (error) {
-    if (config.logger) {
-      config.logger.warn({ message: error.message }, 'reasoner fallback');
+      return { decision: bindDecision(cursor.decision, context), source: 'cursor' };
     }
 
-    return templateDecision(context, fallbackSource(error));
+    if (config.llmApiKey) log.info({ from: 'cursor', to: 'gemini', reason: cursor.source }, 'model fallback');
+    if (!config.llmApiKey) return chooseTemplate(log, context, cursor.source);
   }
+
+  if (!config.llmApiKey) return chooseTemplate(log, context, 'missing_api_key');
+
+  const gemini = await attemptModel(
+    log,
+    config,
+    'gemini',
+    config.llmModel,
+    () => callModel(context, config),
+  );
+
+  if (gemini.decision) {
+    log.info({ provider: 'gemini', source: 'model', service_id: gemini.decision.service_id }, 'model chosen');
+
+    return { decision: bindDecision(gemini.decision, context), source: 'model' };
+  }
+
+  return chooseTemplate(log, context, gemini.source);
 }
 
 module.exports = {

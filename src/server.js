@@ -1,6 +1,7 @@
 const fs = require('fs');
 const fastify = require('fastify');
 const { loadConfig } = require('./config');
+const { createLogger } = require('./logger');
 const { createLiveBus } = require('./live');
 const { createStore } = require('./store/redis');
 const { createEventQueue } = require('./queue');
@@ -13,7 +14,7 @@ const { registerDashboardRoutes } = require('./routes/dashboard');
 
 async function buildApp() {
   const config = loadConfig();
-  const app = fastify({ logger: true });
+  const app = fastify({ loggerInstance: createLogger() });
   const store = createStore(config.redisUrl, app.log);
   const events = createEventQueue(config.redisUrl, app.log);
   const live = createLiveBus();
