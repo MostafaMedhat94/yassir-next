@@ -242,7 +242,7 @@
 
     function because(event) {
       const decision = event.decision || {};
-      if (event.source === 'model' && decision.reason) return decision.reason;
+      if ((event.source === 'model' || event.source === 'cursor') && decision.reason) return decision.reason;
       const gap = neverLabel[decision.service_id];
       if (event.full_name && gap) return `${event.full_name} has never ${gap}.`;
       return decision.reason || '';
@@ -285,7 +285,7 @@
         lines.push(`<p class="past">${escapeHtml(services[decision.service_id] || decision.service_id)}${pct}</p>`);
       } else if (decision) {
         const pct = Number.isFinite(decision.confidence) ? `${Math.round(decision.confidence * 100)}% · ` : '';
-        const written = event.source_label || (event.source === 'model' ? 'Written by the model' : 'Written from the fallback');
+        const written = event.source_label || (event.source === 'cursor' ? 'Written by Cursor' : event.source === 'model' ? 'Written by the model' : 'Written from the fallback');
         lines.push(`<div class="now"><p class="kicker">The choice</p><h2>${escapeHtml(services[decision.service_id] || decision.service_id)}</h2><p>${escapeHtml(because(event))}</p><p class="meta">${escapeHtml(pct + written)}</p></div>`);
       }
 

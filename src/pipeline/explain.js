@@ -26,6 +26,7 @@ function explainDelivery({ status, reason, name, demoMode }) {
 }
 
 function sourceLabel(source) {
+  if (source === 'cursor') return 'Written by Cursor';
   if (source === 'model') return 'Written by the model';
 
   return 'Written from the fallback';

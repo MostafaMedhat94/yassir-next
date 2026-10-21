@@ -199,7 +199,7 @@ async function evaluateCase(item) {
 
     result = await reasonAboutContext(context, { logger: console, llmTimeoutMs: 20000 });
 
-    if (result.source === 'model' || result.source === 'invalid_output') break;
+    if (result.source === 'model' || result.source === 'cursor' || result.source === 'invalid_output') break;
   }
 
   return {

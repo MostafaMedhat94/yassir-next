@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const { loadConfig } = require('../config');
 const { SERVICES, SERVICE_IDS } = require('../config/catalog');
+const { callCursor } = require('./cursor');
 const { visibleText } = require('./deliver');
 
 const decisionSchema = z.object({
@@ -249,10 +250,13 @@ function extractText(body) {
 }
 
 function parseDecision(text) {
-  const cleaned = text.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+  const cleaned = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  const json = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
 
   try {
-    const parsed = decisionSchema.safeParse(JSON.parse(cleaned));
+    const parsed = decisionSchema.safeParse(JSON.parse(json));
 
     return parsed.success ? parsed.data : null;
   } catch (_error) {
@@ -319,6 +323,24 @@ async function reasonAboutContext(context, options = {}) {
     fetchImpl: fetch,
     ...options,
   };
+
+  if (!config.cursorApiKey && !config.llmApiKey) return templateDecision(context, 'missing_api_key');
+
+  if (config.cursorApiKey) {
+    try {
+      const text = await withDeadline(callCursor(context, {
+        ...config,
+        addressAs: firstNameOf(context.persona && context.persona.full_name),
+      }, systemPrompt()), config.llmTimeoutMs);
+      const decision = parseDecision(text);
+
+      if (decision) return { decision: bindDecision(decision, context), source: 'cursor' };
+
+      if (config.logger) config.logger.warn({ message: 'cursor_invalid_output' }, 'reasoner cursor fallback');
+    } catch (error) {
+      if (config.logger) config.logger.warn({ message: error.message }, 'reasoner cursor fallback');
+    }
+  }
 
   if (!config.llmApiKey) return templateDecision(context, 'missing_api_key');
 
